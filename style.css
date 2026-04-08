@@ -1930,3 +1930,38 @@ body {
 @media (max-width: 600px) {
   .services-grid { grid-template-columns: 1fr; }
 }
+
+
+/* ─── GAME MODE OVERLAY ─── */
+body.game-mode::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 14, 0.85);
+  z-index: -1;
+  pointer-events: none;
+  animation: fadeDim 1.5s ease forwards;
+}
+body.game-mode #particle-canvas {
+  z-index: 100 !important;
+  position: fixed !important;
+}
+body.game-mode .terminal-section { position: relative; z-index: 101; }
+@keyframes fadeDim { from { opacity: 0; } to { opacity: 1; } }
+
+
+/* ─── HACKER MODE & SNAKE ─── */
+body.hacker-mode .terminal-body {
+  color: #16a34a !important;
+}
+body.hacker-mode .t-white,
+body.hacker-mode .t-cyan,
+body.hacker-mode .t-purple,
+body.hacker-mode .t-green,
+body.hacker-mode .t-dim,
+body.hacker-mode .t-error,
+body.hacker-mode .t-accent {
+  color: #22c55e !important;
+  text-shadow: 0 0 5px rgba(34, 197, 94, 0.4);
+}
+
