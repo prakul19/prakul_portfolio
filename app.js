@@ -2,11 +2,19 @@
    PORTFOLIO JAVASCRIPT — Prakul Agarwal
 ════════════════════════════════════════ */
 
-/* ─── PARTICLE BACKGROUND ─── */
+/* ─── PARTICLE BACKGROUND & ASTEROIDS GAME ─── */
 (function initParticles() {
   const canvas = document.getElementById('particle-canvas');
   const ctx = canvas.getContext('2d');
   let W, H, particles, animId;
+
+  // Game state
+  let gameState = 'inactive'; // 'inactive', 'playing', 'gameover'
+  let score = 0;
+  let lives = 3;
+  const keys = {};
+
+  const ship = { x: 0, y: 0, vx: 0, vy: 0, angle: -Math.PI / 2, radius: 12, lasers: [] };
 
   function resize() {
     W = canvas.width = window.innerWidth;
@@ -22,12 +30,48 @@
       dy: (Math.random() - 0.5) * 0.35,
       alpha: Math.random() * 0.5 + 0.1,
       color: Math.random() > 0.5 ? '124,58,237' : '6,182,212',
+      isBig: false
     }));
   }
+
+  function spawnAsteroids(n) {
+    for (let i = 0; i < n; i++) {
+      particles.push({
+        x: Math.random() > 0.5 ? 0 : W,
+        y: Math.random() * H,
+        r: Math.random() * 15 + 10,
+        dx: (Math.random() - 0.5) * 3.5,
+        dy: (Math.random() - 0.5) * 3.5,
+        alpha: 0.9,
+        color: Math.random() > 0.5 ? '124,58,237' : '6,182,212',
+        isBig: true
+      });
+    }
+  }
+
+  window.addEventListener('keydown', e => {
+    if (gameState === 'playing' && ['ArrowUp', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+      e.preventDefault();
+    }
+    keys[e.key] = true;
+
+    if (gameState === 'playing' && e.key === ' ' && !e.repeat) {
+      ship.lasers.push({
+        x: ship.x + Math.cos(ship.angle) * ship.radius,
+        y: ship.y + Math.sin(ship.angle) * ship.radius,
+        vx: Math.cos(ship.angle) * 12 + ship.vx,
+        vy: Math.sin(ship.angle) * 12 + ship.vy,
+        life: 50
+      });
+    }
+  });
+
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
 
   function connectParticles() {
     for (let i = 0; i < particles.length; i++) {
       for (let j = i + 1; j < particles.length; j++) {
+        if (particles[i].isBig || particles[j].isBig) continue;
         const dx = particles[i].x - particles[j].x;
         const dy = particles[i].y - particles[j].y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -43,20 +87,158 @@
     }
   }
 
+  function updateGame() {
+    if (gameState !== 'playing') return;
+
+    if (keys['ArrowLeft']) ship.angle -= 0.1;
+    if (keys['ArrowRight']) ship.angle += 0.1;
+    if (keys['ArrowUp']) {
+      ship.vx += Math.cos(ship.angle) * 0.25;
+      ship.vy += Math.sin(ship.angle) * 0.25;
+    }
+
+    ship.vx *= 0.98;
+    ship.vy *= 0.98;
+
+    ship.x += ship.vx;
+    ship.y += ship.vy;
+
+    if (ship.x < 0) ship.x = W;
+    if (ship.x > W) ship.x = 0;
+    if (ship.y < 0) ship.y = H;
+    if (ship.y > H) ship.y = 0;
+
+    for (let i = ship.lasers.length - 1; i >= 0; i--) {
+      let l = ship.lasers[i];
+      l.x += l.vx;
+      l.y += l.vy;
+      l.life--;
+      if (l.life <= 0 || l.x < 0 || l.x > W || l.y < 0 || l.y > H) {
+        ship.lasers.splice(i, 1);
+        continue;
+      }
+
+      for (let j = particles.length - 1; j >= 0; j--) {
+        let p = particles[j];
+        if (!p.isBig) continue;
+        const dx = l.x - p.x;
+        const dy = l.y - p.y;
+        if (Math.sqrt(dx * dx + dy * dy) < p.r) {
+          particles.splice(j, 1);
+          ship.lasers.splice(i, 1);
+          score += 100;
+
+          if (particles.filter(x => x.isBig).length < 5) spawnAsteroids(2);
+          break;
+        }
+      }
+    }
+
+    for (let j = particles.length - 1; j >= 0; j--) {
+      let p = particles[j];
+      if (!p.isBig) continue;
+      const dx = ship.x - p.x;
+      const dy = ship.y - p.y;
+      if (Math.sqrt(dx * dx + dy * dy) < p.r + ship.radius - 2) {
+        lives--;
+        ship.x = W / 2; ship.y = H / 2;
+        ship.vx = 0; ship.vy = 0;
+        particles.splice(j, 1);
+        if (lives <= 0) {
+          gameState = 'gameover';
+          setTimeout(() => {
+            document.body.classList.remove('game-mode');
+            gameState = 'inactive';
+            init();
+          }, 3500);
+        }
+        break;
+      }
+    }
+  }
+
+  function drawGameUI() {
+    if (gameState === 'playing') {
+      ctx.fillStyle = '#fff';
+      ctx.font = '24px "Fira Code", monospace';
+      ctx.fillText(`SCORE: ${score}`, 30, 50);
+      ctx.fillText(`LIVES: ${'❤️'.repeat(lives)}`, 30, 80);
+
+      ctx.save();
+      ctx.translate(ship.x, ship.y);
+      ctx.rotate(ship.angle);
+      ctx.beginPath();
+      ctx.moveTo(ship.radius, 0);
+      ctx.lineTo(-ship.radius, ship.radius * 0.7);
+      ctx.lineTo(-ship.radius * 0.5, 0);
+      ctx.lineTo(-ship.radius, -ship.radius * 0.7);
+      ctx.closePath();
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      if (keys['ArrowUp']) {
+        ctx.beginPath();
+        ctx.moveTo(-ship.radius * 0.5, 0);
+        ctx.lineTo(-ship.radius * 1.8, (Math.random() - 0.5) * 5);
+        ctx.strokeStyle = '#f87171';
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.fillStyle = '#4ade80';
+      for (const l of ship.lasers) {
+        ctx.beginPath();
+        ctx.arc(l.x, l.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#4ade80';
+      }
+      ctx.shadowBlur = 0;
+    } else if (gameState === 'gameover') {
+      ctx.fillStyle = '#f87171';
+      ctx.font = 'bold 50px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`GAME OVER`, W / 2, H / 2 - 20);
+      ctx.fillStyle = '#fff';
+      ctx.font = '24px "Fira Code", monospace';
+      ctx.fillText(`FINAL SCORE: ${score}`, W / 2, H / 2 + 30);
+      ctx.textAlign = 'left';
+    }
+  }
+
   function draw() {
     ctx.clearRect(0, 0, W, H);
+
+    updateGame();
+
     for (const p of particles) {
       p.x += p.dx;
       p.y += p.dy;
-      if (p.x < 0 || p.x > W) p.dx *= -1;
-      if (p.y < 0 || p.y > H) p.dy *= -1;
+      if (p.isBig) {
+        if (p.x < -p.r) p.x = W + p.r;
+        if (p.x > W + p.r) p.x = -p.r;
+        if (p.y < -p.r) p.y = H + p.r;
+        if (p.y > H + p.r) p.y = -p.r;
+      } else {
+        if (p.x < 0 || p.x > W) p.dx *= -1;
+        if (p.y < 0 || p.y > H) p.dy *= -1;
+      }
 
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
-      ctx.fill();
+      if (p.isBig) {
+        ctx.strokeStyle = `rgba(${p.color},${p.alpha})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
+        ctx.fill();
+      }
     }
-    connectParticles();
+
+    if (gameState === 'inactive') connectParticles();
+    drawGameUI();
+
     animId = requestAnimationFrame(draw);
   }
 
@@ -67,8 +249,27 @@
     draw();
   }
 
-  window.addEventListener('resize', () => { resize(); particles = createParticles(80); });
+  window.addEventListener('resize', () => {
+    if (gameState !== 'playing') { resize(); particles = createParticles(80); }
+  });
+
   init();
+
+  window.startAsteroidsGame = () => {
+    document.body.classList.add('game-mode');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    gameState = 'playing';
+    score = 0;
+    lives = 3;
+    ship.x = W / 2;
+    ship.y = H / 2;
+    ship.vx = 0;
+    ship.vy = 0;
+    ship.angle = -Math.PI / 2;
+    ship.lasers = [];
+    particles = createParticles(50);
+    spawnAsteroids(8);
+  };
 })();
 
 /* ─── CURSOR GLOW ─── */
@@ -401,21 +602,28 @@ document.head.appendChild(style);
   if (!output || !input) return;
 
   /* ─── State ─── */
+
   let history = [];
   let histIdx = -1;
   let matrixActive = false;
   let matrixAnimId = null;
   let booted = false;
-  let busy = false;  // prevent input while typing boot sequence
+  let busy = false;
+
+  // Games State
+  let rpgState = 0;
+
 
   /* ─── All available commands (for tab-complete) ─── */
   const COMMANDS = [
     'help', 'whoami', 'about', 'skills', 'projects',
     'contact', 'services', 'fetch', 'ls', 'cat', 'pwd', 'date', 'echo',
-    'clear', 'history', 'matrix', 'sudo', 'ping', 'open', 'gui', 'banner'
+    'clear', 'history', 'matrix', 'sudo', 'ping', 'open', 'gui'
   ];
 
+
   /* ══════════════ OUTPUT HELPERS ══════════════ */
+
 
   function line(text = '', cls = 't-out', delay = 0) {
     return new Promise(resolve => {
@@ -494,17 +702,7 @@ document.head.appendChild(style);
   async function boot() {
     busy = true;
 
-    const bootLines = [
-      [`<span class="t-purple t-bold">██████╗ ██████╗  █████╗ ██╗  ██╗██╗   ██╗██╗     </span>`, 't-out'],
-      [`<span class="t-purple t-bold">██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██║   ██║██║     </span>`, 't-out'],
-      [`<span class="t-cyan t-bold">██████╔╝██████╔╝███████║█████╔╝ ██║   ██║██║     </span>`, 't-out'],
-      [`<span class="t-cyan t-bold">██╔═══╝ ██╔══██╗██╔══██║██╔═██╗ ██║   ██║██║     </span>`, 't-out'],
-      [`<span class="t-white t-bold">██║     ██║  ██║██║  ██║██║  ██╗╚██████╔╝███████╗</span>`, 't-out'],
-      [`<span class="t-white t-bold">╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝</span>`, 't-out'],
-    ];
-
-    await typeLines(bootLines, 0, 55);
-    await blank(60);
+    const bootLines = [];
     await line(`<span class="t-green t-bold">PrakulOS</span> <span class="t-dim">v1.0.0 — Interactive Portfolio Terminal</span>`, 't-out', 60);
     await line(`<span class="t-dim">Copyright © 2024 Prakul Agarwal. All rights reserved.</span>`, 't-out', 80);
     await blank(90);
@@ -562,7 +760,7 @@ document.head.appendChild(style);
         ['history', 'Show command history'],
         ['open [url]', 'Open github | linkedin | twitter'],
         ['matrix', 'Toggle matrix rain mode 🟩'],
-        ['banner', 'Show the ASCII banner again'],
+        ['play', 'Play Asteroids in the background! 🚀'],
         ['services', 'My freelance service offerings'],
         ['sudo [cmd]', 'Try your luck 😈'],
         ['gui', 'Switch to GUI mode (scroll up)'],
@@ -851,20 +1049,6 @@ document.head.appendChild(style);
       setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 800);
     },
 
-    banner: async () => {
-      await blank();
-      const bannerLines = [
-        [`<span class="t-purple t-bold">██████╗ ██████╗  █████╗ ██╗  ██╗██╗   ██╗██╗     </span>`],
-        [`<span class="t-purple t-bold">██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██║   ██║██║     </span>`],
-        [`<span class="t-cyan t-bold">██████╔╝██████╔╝███████║█████╔╝ ██║   ██║██║     </span>`],
-        [`<span class="t-cyan t-bold">██╔═══╝ ██╔══██╗██╔══██║██╔═██╗ ██║   ██║██║     </span>`],
-        [`<span class="t-white t-bold">██║     ██║  ██║██║  ██║██║  ██╗╚██████╔╝███████╗</span>`],
-        [`<span class="t-white t-bold">╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝</span>`],
-      ];
-      await typeLines(bannerLines, 0, 55);
-      await blank(400);
-    },
-
     sudo: async (args) => {
       await blank();
       await line(`<span class="t-warn">[sudo] password for prakul:</span>`, 't-warn', 0);
@@ -873,6 +1057,14 @@ document.head.appendChild(style);
         await line(`<span class="t-green t-bold">✓ Access granted! Prakul is officially hired. 🎉</span>`, 't-success', 0);
         await line(`  Redirecting to contact form...`, 't-dim', 200);
         setTimeout(() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }), 1500);
+      } else if (args[0] === 'hack') {
+        rpgState = 1;
+        await line('<span class="t-error t-bold">>>> OVERRIDE INITIATED <<<</span>', 't-error', 0);
+        await line('SYSTEM: Connection intercepted.', 't-dim', 400);
+        await line('To gain root access, you must prove your worth.', 't-out', 1000);
+        await blank(1200);
+        await line('<span class="t-cyan">Level 1: I speak without a mouth and hear without ears. What command am I?</span>', 't-out', 1800);
+        setTimeout(() => input.focus(), 1900);
       } else if (args[0] === 'rm' && args[1] === '-rf') {
         await line(`<span class="t-error">sudo: Nice try 😂 This portfolio is indestructible.</span>`, 't-error');
       } else {
@@ -920,6 +1112,19 @@ document.head.appendChild(style);
       await blank(d);
       await line(`  <span class="t-green">→ Available for remote work worldwide · prakul.agarwal.dev@gmail.com</span>`, 't-success', d + 20);
       await blank(d + 40);
+    },
+
+    play: async () => {
+      await blank();
+      await line(`<span class="t-cyan t-bold">INITIATING ASTEROIDS PROTOCOL...</span>`, 't-out', 0);
+      await line(`> Booting canvas thrusters... [OK]`, 't-dim', 400);
+      await line(`> Arming laser systems...     [OK]`, 't-dim', 800);
+      await line(`<span class="t-green">CONTROLS: Use ⬆️ ⬅️ ➡️ to fly, and [SPACE] to shoot.</span>`, 't-out', 1200);
+      await line(`<span class="t-green">Good luck, Commander.</span>`, 't-success', 1600);
+      await blank(1800);
+      setTimeout(() => {
+        window.startAsteroidsGame();
+      }, 1900);
     },
   };
 
@@ -995,8 +1200,53 @@ document.head.appendChild(style);
     if (busy) { e.preventDefault(); return; }
 
     if (e.key === 'Enter') {
-      const val = input.value;
+      const val = input.value.trim();
       input.value = '';
+      if (!val) return;
+
+      if (rpgState > 0) {
+        let lval = val.toLowerCase();
+        await line(`<span class="t-dim">> ${val}</span>`, 't-out', 0);
+        if (val === 'exit' || val === 'quit') {
+          rpgState = 0;
+          await line('<span class="t-dim">Override cancelled by user.</span>', 't-out');
+          return;
+        }
+        busy = true;
+
+        if (rpgState === 1) {
+          if (lval === 'echo') {
+            rpgState = 2;
+            await line('<span class="t-success">Access granted.</span>', 't-success', 300);
+            await line('<span class="t-cyan">Level 2: What does \`typeof null\` evaluate to in JavaScript?</span>', 't-out', 800);
+          } else {
+            await line('<span class="t-error">Incorrect. Try again.</span>', 't-error', 200);
+          }
+        } else if (rpgState === 2) {
+          if (lval === 'object') {
+            rpgState = 3;
+            await line('<span class="t-success">Correct. Unfortunate, but correct.</span>', 't-success', 300);
+            await line('<span class="t-cyan">Final Level: Type the exact override code to gain root access: </span><span class="t-error">XYZ-99</span>', 't-out', 800);
+          } else {
+            await line('<span class="t-error">Incorrect. Try again.</span>', 't-error', 200);
+          }
+        } else if (rpgState === 3) {
+          if (lval === 'xyz-99') {
+            rpgState = 0;
+            await line('<span class="t-success t-bold">ROOT ACCESS GRANTED.</span>', 't-success', 300);
+            await line('Welcome, Admin. Initiating Hacker Mode...', 't-dim', 800);
+            setTimeout(() => {
+              document.body.classList.add('hacker-mode');
+            }, 1000);
+          } else {
+            await line('<span class="t-error">INCORRECT. CONNECTION TERMINATED.</span>', 't-error', 200);
+            rpgState = 0;
+          }
+        }
+        busy = false;
+        return;
+      }
+
       await runCommand(val);
     }
 
